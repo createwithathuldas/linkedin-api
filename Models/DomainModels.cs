@@ -32,6 +32,9 @@ public class User : EntityBase
     public DateTime? RefreshTokenExpiresAt { get; set; }
     public DateTime? LastLoginAt { get; set; }
     public bool IsActive { get; set; } = true;
+    public bool IsEmailVerified { get; set; }
+    [MaxLength(10)] public string? OtpCode { get; set; }
+    public DateTime? OtpExpiresAt { get; set; }
 }
 
 public class PremiumSubscription : EntityBase { public int UserId { get; set; } public AccountTier Tier { get; set; } public SubscriptionStatus Status { get; set; } = SubscriptionStatus.Active; public DateTime StartsAt { get; set; } = DateTime.UtcNow; public DateTime? ExpiresAt { get; set; } public bool AutoRenew { get; set; } = true; }
@@ -55,14 +58,14 @@ public class Recommendation : EntityBase { public int UserId { get; set; } publi
 public class FeaturedItem : EntityBase { public int UserId { get; set; } [MaxLength(180)] public string Title { get; set; } = ""; [MaxLength(600)] public string? Url { get; set; } [MaxLength(80)] public string? ItemType { get; set; } }
 
 public class Connection : EntityBase { public int UserId { get; set; } public int ConnectedUserId { get; set; } }
-public class ConnectionRequest : EntityBase { public int RequesterUserId { get; set; } public int AddresseeUserId { get; set; } public ConnectionRequestStatus Status { get; set; } = ConnectionRequestStatus.Pending; [MaxLength(500)] public string? Message { get; set; } }
+public class ConnectionRequest : EntityBase { public int RequesterUserId { get; set; } public int AddresseeUserId { get; set; } public ConnectionRequestStatus Status { get; set; } = ConnectionRequestStatus.Pending; [MaxLength(500)] public string? Message { get; set; } [ForeignKey("RequesterUserId")] public virtual User? Requester { get; set; } [ForeignKey("AddresseeUserId")] public virtual User? Addressee { get; set; } }
 public class ConnectionSuggestion : EntityBase { public int UserId { get; set; } public int SuggestedUserId { get; set; } public SuggestionCategory Category { get; set; } public bool Dismissed { get; set; } public double Score { get; set; } }
 public class Follow : EntityBase { public int FollowerUserId { get; set; } public int FollowedUserId { get; set; } }
 public class Block : EntityBase { public int BlockerUserId { get; set; } public int BlockedUserId { get; set; } }
 
-public class Post : EntityBase { public int AuthorUserId { get; set; } public int? CompanyId { get; set; } public int? GroupId { get; set; } public PostType Type { get; set; } = PostType.Text; public TemplateType TemplateType { get; set; } = TemplateType.None; [Column(TypeName = "text")] public string? Content { get; set; } [Column(TypeName = "json")] public string? MediaUrlsJson { get; set; } [MaxLength(600)] public string? LinkUrl { get; set; } public bool IsDraft { get; set; } public bool IsPinned { get; set; } public int? RepostOfPostId { get; set; } public RepostType? RepostType { get; set; } }
+public class Post : EntityBase { public int AuthorUserId { get; set; } [ForeignKey("AuthorUserId")] public virtual User? Author { get; set; } public int? CompanyId { get; set; } public int? GroupId { get; set; } public PostType Type { get; set; } = PostType.Text; public TemplateType TemplateType { get; set; } = TemplateType.None; [Column(TypeName = "text")] public string? Content { get; set; } [Column(TypeName = "json")] public string? MediaUrlsJson { get; set; } [MaxLength(600)] public string? LinkUrl { get; set; } public bool IsDraft { get; set; } public bool IsPinned { get; set; } public int? RepostOfPostId { get; set; } public RepostType? RepostType { get; set; } [NotMapped] public int ReactionCount { get; set; } [NotMapped] public int CommentCount { get; set; } }
 public class Reaction : EntityBase { public int UserId { get; set; } public int? PostId { get; set; } public int? CommentId { get; set; } public int? MessageId { get; set; } public ReactionType Type { get; set; } = ReactionType.Like; }
-public class Comment : EntityBase { public int PostId { get; set; } public int UserId { get; set; } public int? ParentCommentId { get; set; } [Column(TypeName = "text")] public string Text { get; set; } = ""; }
+public class Comment : EntityBase { public int PostId { get; set; } public int UserId { get; set; } [ForeignKey("UserId")] public virtual User? User { get; set; } public int? ParentCommentId { get; set; } [Column(TypeName = "text")] public string Text { get; set; } = ""; }
 public class SavedItem : EntityBase { public int UserId { get; set; } public SavedItemType Type { get; set; } public int ItemId { get; set; } [MaxLength(120)] public string CollectionName { get; set; } = "Default"; }
 public class Hashtag : EntityBase { [MaxLength(120)] public string Tag { get; set; } = ""; public int? FollowerUserId { get; set; } public int? PostId { get; set; } }
 public class PostReport : EntityBase { public int PostId { get; set; } public int ReporterUserId { get; set; } [MaxLength(120)] public string Reason { get; set; } = ""; [Column(TypeName = "text")] public string? Details { get; set; } }

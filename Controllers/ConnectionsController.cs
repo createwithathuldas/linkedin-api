@@ -16,10 +16,58 @@ public class ConnectionsController(ApplicationDbContext db, IApiEntityService en
     [HttpDelete("request/{id:int}")] public async Task<ActionResult> DeleteRequest(int id) => await Delete<ConnectionRequest>(id);
     [HttpDelete("{userId:int}")] public async Task<ActionResult> Disconnect(int userId) { var rows = await Db.Connections.Where(x => (x.UserId == Me && x.ConnectedUserId == userId) || (x.UserId == userId && x.ConnectedUserId == Me)).ToListAsync(); Db.RemoveRange(rows); await Db.SaveChangesAsync(); return NoContent(); }
     [HttpGet] public async Task<ActionResult> Mine() => await List(Db.Connections.Where(x => x.UserId == Me));
-    [HttpGet("received")] public async Task<ActionResult> Received() => await List(Db.ConnectionRequests.Where(x => x.AddresseeUserId == Me && x.Status == ConnectionRequestStatus.Pending));
-    [HttpGet("sent")] public async Task<ActionResult> Sent() => await List(Db.ConnectionRequests.Where(x => x.RequesterUserId == Me && x.Status == ConnectionRequestStatus.Pending));
-    [HttpGet("suggestions")] public async Task<ActionResult> Suggestions() => await List(Db.ConnectionSuggestions.Where(x => x.UserId == Me && !x.Dismissed).OrderByDescending(x => x.Score));
-    [HttpGet("suggestions/{category}")] public async Task<ActionResult> SuggestionsByCategory(SuggestionCategory category) => await List(Db.ConnectionSuggestions.Where(x => x.UserId == Me && x.Category == category && !x.Dismissed));
+    [HttpGet("received")] public async Task<ActionResult> Received() => await List(Db.ConnectionRequests.Include(x => x.Requester).Where(x => x.AddresseeUserId == Me && x.Status == ConnectionRequestStatus.Pending));
+    [HttpGet("sent")] public async Task<ActionResult> Sent() => await List(Db.ConnectionRequests.Include(x => x.Addressee).Where(x => x.RequesterUserId == Me && x.Status == ConnectionRequestStatus.Pending));
+    [HttpGet("suggestions")]
+    public async Task<ActionResult> Suggestions()
+    {
+        var suggestedUserIds = await Db.ConnectionSuggestions
+            .Where(x => x.UserId == Me && !x.Dismissed)
+            .OrderByDescending(x => x.Score)
+            .Select(x => x.SuggestedUserId)
+            .ToListAsync();
+        
+        List<User> result;
+        if (suggestedUserIds.Any())
+        {
+            var suggestedUsers = await Db.Users
+                .Where(x => suggestedUserIds.Contains(x.Id))
+                .ToListAsync();
+
+            result = suggestedUserIds
+                .Select(id => suggestedUsers.FirstOrDefault(u => u.Id == id))
+                .Where(u => u != null)
+                .Cast<User>()
+                .ToList();
+        }
+        else
+        {
+            var connectedIds = await Db.Connections.Where(c => c.UserId == Me).Select(c => c.ConnectedUserId).ToListAsync();
+            var pendingIds = await Db.ConnectionRequests.Where(r => r.RequesterUserId == Me || r.AddresseeUserId == Me).Select(r => r.RequesterUserId == Me ? r.AddresseeUserId : r.RequesterUserId).ToListAsync();
+            var exclusions = connectedIds.Concat(pendingIds).Append(Me).Distinct().ToList();
+
+            result = await Db.Users
+                .Where(x => !exclusions.Contains(x.Id))
+                .Take(20)
+                .ToListAsync();
+        }
+
+        return Ok(result);
+    }
+    [HttpGet("suggestions/{category}")]
+    public async Task<ActionResult> SuggestionsByCategory(SuggestionCategory category)
+    {
+        var suggestedUserIds = await Db.ConnectionSuggestions
+            .Where(x => x.UserId == Me && x.Category == category && !x.Dismissed)
+            .Select(x => x.SuggestedUserId)
+            .ToListAsync();
+        
+        var suggestedUsers = await Db.Users
+            .Where(x => suggestedUserIds.Contains(x.Id))
+            .ToListAsync();
+
+        return Ok(suggestedUsers);
+    }
     [HttpPut("settings")] public async Task<ActionResult> UpdateSettings(Dictionary<string, object?> body) { var settings = await Db.UserSettings.FirstOrDefaultAsync(x => x.UserId == Me) ?? new UserSettings { UserId = Me }; settings.PrivacyJson = System.Text.Json.JsonSerializer.Serialize(body); Db.UserSettings.Update(settings); await Db.SaveChangesAsync(); return Ok(settings); }
     [HttpGet("settings")] public async Task<ActionResult> Settings() => Ok(await Db.UserSettings.FirstOrDefaultAsync(x => x.UserId == Me));
     [HttpPost("suggestions/{userId:int}/dismiss")] public async Task<ActionResult> Dismiss(int userId) { var s = await Db.ConnectionSuggestions.FirstOrDefaultAsync(x => x.UserId == Me && x.SuggestedUserId == userId); if (s is null) return NotFound(); s.Dismissed = true; await Db.SaveChangesAsync(); return Ok(s); }

@@ -38,14 +38,42 @@ public class ApiEntityService : IApiEntityService
     private static object? ConvertValue(object? value, Type target)
     {
         if (value is null) return null;
+        var isNullable = Nullable.GetUnderlyingType(target) != null || !target.IsValueType;
         var type = Nullable.GetUnderlyingType(target) ?? target;
+
         if (value is JsonElement json)
         {
-            if (type == typeof(string)) return json.ValueKind == JsonValueKind.String ? json.GetString() : json.GetRawText();
+            if (json.ValueKind == JsonValueKind.Null) return null;
+            if (json.ValueKind == JsonValueKind.String)
+            {
+                var str = json.GetString();
+                if (type == typeof(string)) return str;
+                if (string.IsNullOrWhiteSpace(str))
+                {
+                    if (isNullable) return null;
+                }
+                if (type == typeof(DateTime))
+                {
+                    if (DateTime.TryParse(str, out var dt)) return dt;
+                    if (isNullable) return null;
+                }
+            }
             if (type.IsEnum) return json.ValueKind == JsonValueKind.Number ? Enum.ToObject(type, json.GetInt32()) : Enum.Parse(type, json.GetString() ?? "", true);
             return JsonSerializer.Deserialize(json.GetRawText(), type);
         }
-        if (type.IsEnum) return Enum.Parse(type, value.ToString() ?? "", true);
+
+        var valStr = value.ToString();
+        if (type == typeof(string)) return valStr;
+        if (string.IsNullOrWhiteSpace(valStr))
+        {
+            if (isNullable) return null;
+        }
+        if (type == typeof(DateTime))
+        {
+            if (DateTime.TryParse(valStr, out var dt)) return dt;
+            if (isNullable) return null;
+        }
+        if (type.IsEnum) return Enum.Parse(type, valStr ?? "", true);
         return Convert.ChangeType(value, type);
     }
 }

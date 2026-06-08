@@ -7,7 +7,11 @@ EnvironmentService.LoadDotEnv(Path.Combine(Directory.GetCurrentDirectory(), ".en
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+    });
 builder.Services.AddSignalR();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -70,6 +74,17 @@ using (var scope = app.Services.CreateScope())
     {
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         db.Database.EnsureCreated();
+        try
+        {
+            db.Database.ExecuteSqlRaw("UPDATE Posts SET MediaUrlsJson = REPLACE(MediaUrlsJson, 'http://localhost:5000/media', '/media') WHERE MediaUrlsJson LIKE '%http://localhost:5000/media%';");
+            db.Database.ExecuteSqlRaw("UPDATE Users SET AvatarUrl = REPLACE(AvatarUrl, 'http://localhost:5000/media', '/media') WHERE AvatarUrl LIKE '%http://localhost:5000/media%';");
+            db.Database.ExecuteSqlRaw("UPDATE Users SET BannerUrl = REPLACE(BannerUrl, 'http://localhost:5000/media', '/media') WHERE BannerUrl LIKE '%http://localhost:5000/media%';");
+            db.Database.ExecuteSqlRaw("UPDATE Companies SET LogoUrl = REPLACE(LogoUrl, 'http://localhost:5000/media', '/media') WHERE LogoUrl LIKE '%http://localhost:5000/media%';");
+        }
+        catch (Exception ex)
+        {
+            app.Logger.LogWarning(ex, "Failed to run DB self-healing updates.");
+        }
     }
     catch (Exception ex)
     {
