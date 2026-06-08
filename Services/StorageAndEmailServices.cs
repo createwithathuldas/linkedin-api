@@ -25,19 +25,44 @@ public class LocalMediaStorageService(IWebHostEnvironment env) : IMediaStorageSe
 public interface IEmailService { Task SendAsync(string to, string subject, string body, CancellationToken cancellationToken); }
 public class BrevoEmailService : IEmailService
 {
+    private static readonly HttpClient _httpClient = new();
+
     public async Task SendAsync(string to, string subject, string body, CancellationToken cancellationToken)
     {
-        var user = Environment.GetEnvironmentVariable("BREVO_SMTP_USERNAME");
-        var pass = Environment.GetEnvironmentVariable("BREVO_SMTP_PASSWORD");
-        if (string.IsNullOrWhiteSpace(user) || string.IsNullOrWhiteSpace(pass)) return;
-        using var client = new SmtpClient(Environment.GetEnvironmentVariable("BREVO_SMTP_HOST") ?? "smtp-relay.brevo.com", int.Parse(Environment.GetEnvironmentVariable("BREVO_SMTP_PORT") ?? "587"))
-        {
-            EnableSsl = true,
-            Credentials = new NetworkCredential(user, pass)
-        };
+        var apiKey = Environment.GetEnvironmentVariable("BREVO_API_KEY");
+        if (string.IsNullOrWhiteSpace(apiKey)) return;
         var fromEmail = Environment.GetEnvironmentVariable("BREVO_FROM_EMAIL") ?? "no-reply@linkedin-clone.local";
         var fromName = Environment.GetEnvironmentVariable("BREVO_FROM_NAME") ?? "LinkedIn Clone";
-        using var message = new MailMessage(new MailAddress(fromEmail, fromName), new MailAddress(to)) { Subject = subject, Body = body };
-        await client.SendMailAsync(message, cancellationToken);
+
+        var payload = new
+        {
+            sender = new { name = fromName, email = fromEmail },
+            to = new[] { new { email = to } },
+            subject = subject,
+            htmlContent = body
+        };
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.brevo.com/v3/smtp/email")
+        {
+            Content = new StringContent(System.Text.Json.JsonSerializer.Serialize(payload), System.Text.Encoding.UTF8, "application/json")
+        };
+        request.Headers.Add("api-key", apiKey);
+        request.Headers.Add("accept", "application/json");
+
+        try
+        {
+            using var response = await _httpClient.SendAsync(request, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
+                Console.WriteLine($"Brevo Email Service Failed with status {response.StatusCode}: {errorContent}");
+                throw new HttpRequestException($"Brevo SMTP API returned status {response.StatusCode}: {errorContent}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Brevo Email Service Error: {ex.Message}");
+            throw;
+        }
     }
 }
