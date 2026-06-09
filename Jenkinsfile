@@ -22,7 +22,7 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-                bat "docker build -t %IMAGE% ./linkedin-api"
+                bat "docker build -t %IMAGE%"
             }
         }
 
